@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
@@ -359,146 +360,177 @@ public class PBRMapConverterWindow : EditorWindow
 				Path.GetDirectoryName(assetPath);
 
 			if (!string.IsNullOrEmpty(folder))
-				return folder.Replace("\\", "/");
+			{
+				return Path.GetFullPath(folder);
+			}
 		}
 
-		return "Assets";
+		return Path.GetFullPath("Assets");
 	}
 
-	void ExportTexture()
-	{
-		if (inputs.Count == 0)
-			return;
+	
+void ExportTexture()
+{
+    if (inputs.Count == 0)
+        return;
 
-		foreach (InputMap input in inputs)
-		{
-			if (input.texture == null)
-				continue;
+    foreach (InputMap input in inputs)
+    {
+        if (input.texture == null)
+            continue;
 
-			if (!input.texture.isReadable)
-			{
-				EditorUtility.DisplayDialog(
-					"Texture Error",
-					"Texture '" + input.name +
-					"' is not readable.\n\n" +
-					"Enable Read/Write in Import Settings.",
-					"OK"
-				);
+        if (!input.texture.isReadable)
+        {
+            EditorUtility.DisplayDialog(
+                "Texture Error",
+                "Texture '" + input.name +
+                "' is not readable.\n\n" +
+                "Enable Read/Write in Import Settings.",
+                "OK"
+            );
 
-				return;
-			}
-		}
+            return;
+        }
+    }
 
-		string defaultPath =
-			GetDefaultFolder() + "/PBR_Output.png";
+    // Open save dialog in the actual source folder
+    string defaultFolder = GetDefaultFolder();
 
-		string path = EditorUtility.SaveFilePanelInProject(
-			"Save PBR Texture",
-			defaultPath,
-			"png",
-			"Choose output location"
-		);
+    string absolutePath = EditorUtility.SaveFilePanel(
+        "Save PBR Texture",
+        defaultFolder,
+        "PBR_Output",
+        "png"
+    );
 
-		if (string.IsNullOrEmpty(path))
-			return;
+    if (string.IsNullOrEmpty(absolutePath))
+        return;
 
-		Texture2D result = new Texture2D(
-			resolution,
-			resolution,
-			TextureFormat.RGBA32,
-			false,
-			true
-		);
+    Texture2D result = new Texture2D(
+        resolution,
+        resolution,
+        TextureFormat.RGBA32,
+        false,
+        true
+    );
 
-		try
-		{
-			Color[] pixels = new Color[
-				resolution * resolution
-			];
+    try
+    {
+        Color[] pixels = new Color[
+            resolution * resolution
+        ];
 
-			for (int y = 0; y < resolution; y++)
-			{
-				float v = (float)y / (resolution - 1);
+        for (int y = 0; y < resolution; y++)
+        {
+            float v = (float)y / (resolution - 1);
 
-				for (int x = 0; x < resolution; x++)
-				{
-					float u = (float)x / (resolution - 1);
+            for (int x = 0; x < resolution; x++)
+            {
+                float u = (float)x / (resolution - 1);
 
-					int index = y * resolution + x;
+                int index = y * resolution + x;
 
-					pixels[index] = new Color(
-						GetValue(outputR, u, v),
-						GetValue(outputG, u, v),
-						GetValue(outputB, u, v),
-						GetValue(outputA, u, v)
-					);
-				}
-			}
+                pixels[index] = new Color(
+                    GetValue(outputR, u, v),
+                    GetValue(outputG, u, v),
+                    GetValue(outputB, u, v),
+                    GetValue(outputA, u, v)
+                );
+            }
+        }
 
-			result.SetPixels(pixels);
-			result.Apply(false, false);
+        result.SetPixels(pixels);
+        result.Apply(false, false);
 
-			byte[] pngData = result.EncodeToPNG();
+        byte[] pngData = result.EncodeToPNG();
 
-			File.WriteAllBytes(
-				Path.GetFullPath(path),
-				pngData
-			);
+        File.WriteAllBytes(absolutePath, pngData);
 
-			AssetDatabase.ImportAsset(
-				path,
-				ImportAssetOptions.ForceUpdate
-			);
+        // Check whether the file is inside Unity Assets
+        string assetsPath = Path.GetFullPath(
+            Application.dataPath
+        ).TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar
+        );
 
-			TextureImporter importer =
-				AssetImporter.GetAtPath(path)
-				as TextureImporter;
+        string normalizedPath = Path.GetFullPath(
+            absolutePath
+        );
 
-			if (importer != null)
-			{
-				importer.textureType =
-					TextureImporterType.Default;
+        string assetPath = null;
 
-				importer.sRGBTexture = false;
+        string assetsPrefix =
+            assetsPath + Path.DirectorySeparatorChar;
 
-				importer.alphaSource =
-					TextureImporterAlphaSource.FromInput;
+        if (normalizedPath.StartsWith(
+            assetsPrefix,
+            System.StringComparison.OrdinalIgnoreCase))
+        {
+            assetPath = "Assets" +
+                normalizedPath.Substring(assetsPath.Length)
+                .Replace("\\", "/");
+        }
 
-				importer.alphaIsTransparency = false;
+        // Import only if saved inside Unity project
+        if (!string.IsNullOrEmpty(assetPath))
+        {
+            AssetDatabase.ImportAsset(
+                assetPath,
+                ImportAssetOptions.ForceUpdate
+            );
 
-				importer.mipmapEnabled = false;
+            TextureImporter importer =
+                AssetImporter.GetAtPath(assetPath)
+                as TextureImporter;
 
-				importer.textureCompression =
-					TextureImporterCompression.Uncompressed;
+            if (importer != null)
+            {
+                importer.textureType =
+                    TextureImporterType.Default;
 
-				importer.SaveAndReimport();
-			}
+                importer.sRGBTexture = false;
 
-			Debug.Log(
-				"PBR texture exported: " + path
-			);
+                importer.alphaSource =
+                    TextureImporterAlphaSource.FromInput;
 
-			EditorUtility.DisplayDialog(
-				"Success",
-				"Texture generated successfully!\n\n" +
-				"RGBA channels preserved.\n\n" +
-				path,
-				"OK"
-			);
-		}
-		catch (System.Exception e)
-		{
-			Debug.LogException(e);
+                importer.alphaIsTransparency = false;
 
-			EditorUtility.DisplayDialog(
-				"Export Error",
-				e.Message,
-				"OK"
-			);
-		}
-		finally
-		{
-			DestroyImmediate(result);
-		}
-	}
+                importer.mipmapEnabled = false;
+
+                importer.textureCompression =
+                    TextureImporterCompression.Uncompressed;
+
+                importer.SaveAndReimport();
+            }
+        }
+
+        Debug.Log(
+            "PBR texture exported: " + absolutePath
+        );
+
+        EditorUtility.DisplayDialog(
+            "Success",
+            "Texture generated successfully!\n\n" +
+            "RGBA channels preserved.\n\n" +
+            absolutePath,
+            "OK"
+        );
+    }
+    catch (System.Exception e)
+    {
+        Debug.LogException(e);
+
+        EditorUtility.DisplayDialog(
+            "Export Error",
+            e.Message,
+            "OK"
+        );
+    }
+    finally
+    {
+        DestroyImmediate(result);
+    }
+}
+
 }
