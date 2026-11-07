@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "displayName": "PBR Map Converter",
     "description": "A flexible PBR texture packing tool for Unity. Combine multiple source textures into RGBA mask maps with customizable channel mapping, inversion, and constant values.",
-    "unity": "6000.5.8f1",
+    "unity": "6000.5",
     "keywords": [
         "PBR",
         "Texture",
