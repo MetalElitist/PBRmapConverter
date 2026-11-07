@@ -48,7 +48,10 @@ public class PBRMapConverterWindow : EditorWindow
 	OutputChannel outputA = new OutputChannel();
 
 	[SerializeField]
-	int resolution = 2048;
+	int width = 2048;
+
+	[SerializeField]
+	int height = 2048;
 
 	[MenuItem("Tools/PBR Map Converter")]
 	static void OpenWindow()
@@ -107,24 +110,18 @@ public class PBRMapConverterWindow : EditorWindow
 			EditorStyles.boldLabel
 		);
 
-		resolution = EditorGUILayout.IntPopup(
-			"Resolution",
-			resolution,
-			new string[]
-			{
-				"512",
-				"1024",
-				"2048",
-				"4096"
-			},
-			new int[]
-			{
-				512,
-				1024,
-				2048,
-				4096
-			}
+		width = EditorGUILayout.IntField(
+			"Width",
+			width
 		);
+
+		height = EditorGUILayout.IntField(
+			"Height",
+			height
+		);
+
+		width = Mathf.Clamp(width, 2, 8192);
+		height = Mathf.Clamp(height, 2, 8192);
 
 		EditorGUILayout.Space(15);
 
@@ -198,12 +195,23 @@ public class PBRMapConverterWindow : EditorWindow
 
 			EditorGUILayout.EndHorizontal();
 
+			Texture2D previousTexture = input.texture;
+
 			input.texture = (Texture2D)EditorGUILayout.ObjectField(
 				"Texture",
 				input.texture,
 				typeof(Texture2D),
 				false
 			);
+
+			if (input.texture != null && input.texture != previousTexture)
+			{
+				if (inputs.IndexOf(input) == 0)
+				{
+					width = input.texture.width;
+					height = input.texture.height;
+				}
+			}
 
 			EditorGUILayout.EndVertical();
 		}
@@ -420,37 +428,37 @@ void ExportTexture()
         return;
 
     Texture2D result = new Texture2D(
-        resolution,
-        resolution,
-        TextureFormat.RGBA32,
-        false,
-        true
+	    width,
+	    height,
+	    TextureFormat.RGBA32,
+	    false,
+	    true
     );
 
     try
     {
-        Color[] pixels = new Color[
-            resolution * resolution
-        ];
+	    Color[] pixels = new Color[
+		    width * height
+	    ];
 
-        for (int y = 0; y < resolution; y++)
-        {
-            float v = (float)y / (resolution - 1);
+	    for (int y = 0; y < height; y++)
+	    {
+		    float v = (float)y / (height - 1);
 
-            for (int x = 0; x < resolution; x++)
-            {
-                float u = (float)x / (resolution - 1);
+		    for (int x = 0; x < width; x++)
+		    {
+			    float u = (float)x / (width - 1);
 
-                int index = y * resolution + x;
+			    int index = y * width + x;
 
-                pixels[index] = new Color(
-                    GetValue(outputR, u, v),
-                    GetValue(outputG, u, v),
-                    GetValue(outputB, u, v),
-                    GetValue(outputA, u, v)
-                );
-            }
-        }
+			    pixels[index] = new Color(
+				    GetValue(outputR, u, v),
+				    GetValue(outputG, u, v),
+				    GetValue(outputB, u, v),
+				    GetValue(outputA, u, v)
+			    );
+		    }
+	    }
 
         result.SetPixels(pixels);
         result.Apply(false, false);
