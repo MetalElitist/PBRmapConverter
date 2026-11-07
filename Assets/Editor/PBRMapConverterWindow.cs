@@ -19,13 +19,18 @@ public class PBRMapConverterWindow : EditorWindow
 		public float value = 1f;
 	}
 
+	
 	[System.Serializable]
 	public class OutputChannel
 	{
+		public bool useConstant = false;
+		public float constantValue = 1f;
+
 		public int inputIndex = 0;
 		public Channel sourceChannel = Channel.R;
 		public bool invert = false;
 	}
+
 
 	[SerializeField]
 	List<InputMap> inputs = new List<InputMap>();
@@ -200,30 +205,11 @@ public class PBRMapConverterWindow : EditorWindow
 				false
 			);
 
-			using (new EditorGUI.DisabledScope(
-				input.texture != null))
-			{
-				input.value = EditorGUILayout.Slider(
-					"Constant Value",
-					input.value,
-					0f,
-					1f
-				);
-			}
-
-			if (input.texture == null)
-			{
-				EditorGUILayout.HelpBox(
-					"Using constant value: " +
-					input.value.ToString("F2"),
-					MessageType.None
-				);
-			}
-
 			EditorGUILayout.EndVertical();
 		}
 	}
 
+	
 	void DrawOutput(
 		string title,
 		OutputChannel output)
@@ -237,33 +223,50 @@ public class PBRMapConverterWindow : EditorWindow
 			EditorStyles.boldLabel
 		);
 
-		string[] inputNames = new string[inputs.Count];
+		output.useConstant = EditorGUILayout.Toggle(
+			"Use Constant",
+			output.useConstant
+		);
 
-		for (int i = 0; i < inputs.Count; i++)
+		if (output.useConstant)
 		{
-			inputNames[i] = inputs[i].name;
-
-			if (string.IsNullOrWhiteSpace(inputNames[i]))
-				inputNames[i] = "Input " + (i + 1);
-		}
-
-		output.inputIndex = Mathf.Clamp(
-			output.inputIndex,
-			0,
-			inputs.Count - 1
-		);
-
-		output.inputIndex = EditorGUILayout.Popup(
-			"Input Source",
-			output.inputIndex,
-			inputNames
-		);
-
-		output.sourceChannel = (Channel)
-			EditorGUILayout.EnumPopup(
-				"Source Channel",
-				output.sourceChannel
+			output.constantValue = EditorGUILayout.Slider(
+				"Constant Value",
+				output.constantValue,
+				0f,
+				1f
 			);
+		}
+		else
+		{
+			string[] inputNames = new string[inputs.Count];
+
+			for (int i = 0; i < inputs.Count; i++)
+			{
+				inputNames[i] = inputs[i].name;
+
+				if (string.IsNullOrWhiteSpace(inputNames[i]))
+					inputNames[i] = "Input " + (i + 1);
+			}
+
+			output.inputIndex = Mathf.Clamp(
+				output.inputIndex,
+				0,
+				inputs.Count - 1
+			);
+
+			output.inputIndex = EditorGUILayout.Popup(
+				"Input Source",
+				output.inputIndex,
+				inputNames
+			);
+
+			output.sourceChannel = (Channel)
+				EditorGUILayout.EnumPopup(
+					"Source Channel",
+					output.sourceChannel
+				);
+		}
 
 		output.invert = EditorGUILayout.Toggle(
 			"Invert",
@@ -272,6 +275,7 @@ public class PBRMapConverterWindow : EditorWindow
 
 		EditorGUILayout.EndVertical();
 	}
+
 
 	void ClampOutputIndices()
 	{
@@ -306,35 +310,43 @@ public class PBRMapConverterWindow : EditorWindow
 		return 0f;
 	}
 
+	
 	float GetValue(
 		OutputChannel output,
 		float u,
 		float v)
 	{
-		InputMap input = inputs[
-			Mathf.Clamp(
-				output.inputIndex,
-				0,
-				inputs.Count - 1
-			)
-		];
-
 		float value;
 
-		if (input.texture != null)
+		if (output.useConstant)
 		{
-			Color pixel = input.texture.GetPixelBilinear(
-				u, v
-			);
-
-			value = GetChannelValue(
-				pixel,
-				output.sourceChannel
-			);
+			value = output.constantValue;
 		}
 		else
 		{
-			value = input.value;
+			InputMap input = inputs[
+				Mathf.Clamp(
+					output.inputIndex,
+					0,
+					inputs.Count - 1
+				)
+			];
+
+			if (input.texture != null)
+			{
+				Color pixel = input.texture.GetPixelBilinear(
+					u, v
+				);
+
+				value = GetChannelValue(
+					pixel,
+					output.sourceChannel
+				);
+			}
+			else
+			{
+				value = input.value;
+			}
 		}
 
 		if (output.invert)
@@ -342,6 +354,7 @@ public class PBRMapConverterWindow : EditorWindow
 
 		return Mathf.Clamp01(value);
 	}
+
 
 	string GetDefaultFolder()
 	{
