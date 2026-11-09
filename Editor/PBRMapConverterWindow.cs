@@ -47,6 +47,9 @@ public class PBRMapConverterWindow : EditorWindow
 	[SerializeField]
 	OutputChannel outputA = new OutputChannel();
 
+	// Temporary readable copies for textures that do not have Read/Write enabled.
+	Dictionary<Texture2D, Texture2D> readableTextureCache;
+
 	[SerializeField]
 	int width = 2048;
 
@@ -342,9 +345,16 @@ public class PBRMapConverterWindow : EditorWindow
 
 			if (input.texture != null)
 			{
-				Color pixel = input.texture.GetPixelBilinear(
-					u, v
-				);
+				Texture2D sourceTexture = input.texture;
+
+				if (!sourceTexture.isReadable &&
+					readableTextureCache != null &&
+					readableTextureCache.TryGetValue(sourceTexture, out Texture2D readableCopy))
+				{
+					sourceTexture = readableCopy;
+				}
+
+				Color pixel = sourceTexture.GetPixelBilinear(u, v);
 
 				value = GetChannelValue(
 					pixel,
@@ -390,29 +400,63 @@ public class PBRMapConverterWindow : EditorWindow
 	}
 
 	
+Texture2D CreateReadableCopy(Texture2D source)
+{
+    RenderTexture renderTexture = RenderTexture.GetTemporary(
+        source.width,
+        source.height,
+        0,
+        RenderTextureFormat.ARGB32,
+        RenderTextureReadWrite.Linear
+    );
+
+    RenderTexture previousActive = RenderTexture.active;
+    Texture2D readableCopy = null;
+
+    try
+    {
+        Graphics.Blit(source, renderTexture);
+        RenderTexture.active = renderTexture;
+
+        readableCopy = new Texture2D(
+            source.width,
+            source.height,
+            TextureFormat.RGBA32,
+            false,
+            true
+        );
+
+        readableCopy.ReadPixels(
+            new Rect(0, 0, source.width, source.height),
+            0,
+            0
+        );
+        readableCopy.Apply(false, false);
+
+        readableCopy.filterMode = source.filterMode;
+        readableCopy.wrapMode = source.wrapMode;
+        readableCopy.anisoLevel = source.anisoLevel;
+
+        return readableCopy;
+    }
+    catch
+    {
+        if (readableCopy != null)
+            DestroyImmediate(readableCopy);
+
+        throw;
+    }
+    finally
+    {
+        RenderTexture.active = previousActive;
+        RenderTexture.ReleaseTemporary(renderTexture);
+    }
+}
+
 void ExportTexture()
 {
     if (inputs.Count == 0)
         return;
-
-    foreach (InputMap input in inputs)
-    {
-        if (input.texture == null)
-            continue;
-
-        if (!input.texture.isReadable)
-        {
-            EditorUtility.DisplayDialog(
-                "Texture Error",
-                "Texture '" + input.name +
-                "' is not readable.\n\n" +
-                "Enable Read/Write in Import Settings.",
-                "OK"
-            );
-
-            return;
-        }
-    }
 
     // Open save dialog in the actual source folder
     string defaultFolder = GetDefaultFolder();
@@ -437,6 +481,20 @@ void ExportTexture()
 
     try
     {
+        readableTextureCache = new Dictionary<Texture2D, Texture2D>();
+
+        foreach (InputMap input in inputs)
+        {
+            if (input.texture == null || input.texture.isReadable)
+                continue;
+
+            if (!readableTextureCache.ContainsKey(input.texture))
+                readableTextureCache.Add(
+                    input.texture,
+                    CreateReadableCopy(input.texture)
+                );
+        }
+
 	    Color[] pixels = new Color[
 		    width * height
 	    ];
@@ -550,6 +608,17 @@ void ExportTexture()
     }
     finally
     {
+        if (readableTextureCache != null)
+        {
+            foreach (Texture2D readableCopy in readableTextureCache.Values)
+            {
+                if (readableCopy != null)
+                    DestroyImmediate(readableCopy);
+            }
+
+            readableTextureCache = null;
+        }
+
         DestroyImmediate(result);
     }
 }
